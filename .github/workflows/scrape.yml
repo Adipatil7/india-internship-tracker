@@ -1,0 +1,52 @@
+name: Scrape Internships
+
+on:
+  schedule:
+    - cron: "30 18 * * *"   # 18:30 UTC = 00:00 IST (midnight India time)
+  workflow_dispatch:          # allow manual trigger from GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write         # needed to push internships.json back to repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install requests==2.31.0 beautifulsoup4==4.12.3 lxml==5.2.1
+
+      - name: Run scraper
+        run: python scraper.py
+
+      - name: Sanity check — first 5 lines of internships.json
+        run: head -n 5 internships.json
+
+      - name: Commit and push if internships.json changed
+        run: |
+          git diff --quiet internships.json || (
+            git config user.name "github-actions[bot]" &&
+            git config user.email "github-actions[bot]@users.noreply.github.com" &&
+            git add internships.json &&
+            git commit -m "chore: update internships [skip ci]" &&
+            git push
+          )
